@@ -111,11 +111,11 @@ impl ScoringFactory {
                 Ok(Box::new(MixedScriptScorer::new(self)))
             }
             ScriptType::Unknown => {
-                // Default to trigram if available, otherwise use a generic scorer
+                // Unknown script falls back to Latin trigram scoring
                 if let Some(model) = &self.trigram_model {
                     Ok(Box::new(trigram::TrigramStringScorer::new(Arc::clone(model))))
                 } else {
-                    Ok(Box::new(GenericStringScorer::new()))
+                    Err(StrangerError::ModelNotLoaded)
                 }
             }
         }
@@ -180,83 +180,10 @@ impl<'a> StringScorer for MixedScriptScorer<'a> {
     }
 }
 
-/// Generic scorer for unknown scripts (falls back to basic heuristics)
-pub struct GenericStringScorer;
-
-impl GenericStringScorer {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for GenericStringScorer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl StringScorer for GenericStringScorer {
-    fn score_string(&self, text: &str) -> ScoringResult {
-        // Basic heuristics for unknown scripts
-        let len = text.chars().count();
-        
-        let mut score = -10.0;
-        
-        // Length bonuses
-        if len >= 3 {
-            score += 1.0;
-        }
-        if len >= 5 {
-            score += 1.0;
-        }
-        
-        // Character diversity bonus
-        let unique_chars: std::collections::HashSet<char> = text.chars().collect();
-        let diversity = unique_chars.len() as f64 / len as f64;
-        score += diversity * 2.0;
-        
-        // Penalty for very short strings
-        if len < 3 {
-            score -= 5.0;
-        }
-        
-        // Basic printability check
-        let printable_ratio = text.chars()
-            .filter(|c| !c.is_control())
-            .count() as f64 / len as f64;
-        score += printable_ratio * 2.0;
-        
-        let threshold = 10.0; // High threshold for unknown scripts
-        
-        ScoringResult::new(score, threshold, ScriptType::Unknown, "Generic".to_string())
-    }
-
-    fn script_type(&self) -> ScriptType {
-        ScriptType::Unknown
-    }
-
-    fn name(&self) -> &'static str {
-        "Generic"
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::language::ScriptType;
-
-    #[test]
-    fn test_generic_scorer() {
-        let scorer = GenericStringScorer::new();
-        
-        let result1 = scorer.score_string("hello");
-        let result2 = scorer.score_string("ab");
-        let result3 = scorer.score_string("hello world test");
-        
-        assert!(result3.score > result1.score); // Longer text should score better
-        assert!(result1.score > result2.score); // Above minimum length should score better
-        assert_eq!(result1.script_type, ScriptType::Unknown);
-    }
 
     #[test]
     fn test_scoring_factory() {
@@ -274,8 +201,8 @@ mod tests {
     fn test_scoring_factory_without_model() {
         let factory = ScoringFactory::new();
         
-        // Should fall back to generic scorer for Latin text when no trigram model
+        // Latin scoring requires a trigram model
         let result = factory.score_string("hello");
-        assert!(result.is_ok());
+        assert!(matches!(result, Err(StrangerError::ModelNotLoaded)));
     }
 }

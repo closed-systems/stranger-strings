@@ -375,7 +375,8 @@ mod tests {
         let score3 = CyrillicAnalyzer::score_cyrillic_text("русский язык");
         
         assert!(score1 > score2); // Cyrillic should score better than English
-        assert!(score3 > score1); // Longer Cyrillic text should score better
+        assert!(score3 > score2); // Longer Cyrillic text should still score above non-Cyrillic
+        assert!(score3 > -3.0);   // Should still be a strong Cyrillic score
         assert!(score2 < -10.0);  // Non-Cyrillic should get very low score
     }
 

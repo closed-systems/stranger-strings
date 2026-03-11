@@ -2,7 +2,7 @@ use clap::{Arg, ArgAction, Command};
 use log::error;
 use std::fs;
 use std::io::{self, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use stranger_strings_rs::{
     get_threshold_for_length, AnalysisOptions, BinaryAnalysisOptions, StrangerError,
@@ -28,7 +28,7 @@ struct CliOptions {
 impl Default for CliOptions {
     fn default() -> Self {
         Self {
-            model: "./StringModel.sng".to_string(),
+            model: default_model_path(),
             verbose: false,
             min_length: 4,
             output: None,
@@ -42,6 +42,15 @@ impl Default for CliOptions {
             use_language_detection: false,
         }
     }
+}
+
+fn default_model_path() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe_path| exe_path.parent().map(|dir| dir.join("StringModel.sng")))
+        .unwrap_or_else(|| PathBuf::from("./StringModel.sng"))
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn main() {
@@ -65,8 +74,7 @@ fn run_main() -> Result<(), StrangerError> {
             .short('m')
             .long("model")
             .value_name("PATH")
-            .help("Path to .sng model file")
-            .default_value("./StringModel.sng"))
+            .help("Path to .sng model file (default: StringModel.sng next to the executable)"))
         .arg(Arg::new("verbose")
             .short('v')
             .long("verbose")
@@ -136,7 +144,10 @@ fn run_main() -> Result<(), StrangerError> {
     let use_language_detection = matches.get_flag("auto-detect") || languages.is_some();
     
     let options = CliOptions {
-        model: matches.get_one::<String>("model").unwrap().clone(),
+        model: matches
+            .get_one::<String>("model")
+            .cloned()
+            .unwrap_or_else(default_model_path),
         verbose: matches.get_flag("verbose"),
         min_length: matches
             .get_one::<String>("min-length")

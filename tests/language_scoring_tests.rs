@@ -48,7 +48,7 @@ fn test_debug_cyrillic_scoring() {
     // Cyrillic should score better than English
     assert!(score1 > score2, "Cyrillic should score better than English: {} > {}", score1, score2);
     
-    // Non-Cyrillic should get very low score
+    // Non-Cyrillic should get very 2low score
     assert!(score2 < -10.0, "Non-Cyrillic should get very low score: {}", score2);
     
     // Test pattern scoring issue
