@@ -33,7 +33,7 @@ impl Default for CliOptions {
             min_length: 4,
             output: None,
             format: "text".to_string(),
-            unique: false,
+            unique: true,
             sort: "score".to_string(),
             info: false,
             test: false,
@@ -68,8 +68,9 @@ fn run_main() -> Result<(), StrangerError> {
         .about("Extract and analyze meaningful strings from binary files using trigram scoring")
         .version("0.1.0")
         .arg(Arg::new("input")
-            .help("Input file to analyze, or \"-\" to read from stdin")
-            .index(1))
+            .help("Input files to analyze, or \"-\" to read from stdin")
+            .index(1)
+            .num_args(1..))
         .arg(Arg::new("model")
             .short('m')
             .long("model")
@@ -86,10 +87,9 @@ fn run_main() -> Result<(), StrangerError> {
             .value_name("NUMBER")
             .help("Minimum string length for binary extraction")
             .default_value("4"))
-        .arg(Arg::new("unique")
-            .short('u')
-            .long("unique")
-            .help("Show each unique string only once (removes duplicates)")
+        .arg(Arg::new("show-repeats")
+            .long("show-repeats")
+            .help("Show duplicate strings (default output is unique strings only)")
             .action(ArgAction::SetTrue))
         .arg(Arg::new("sort")
             .short('s')
@@ -156,7 +156,7 @@ fn run_main() -> Result<(), StrangerError> {
             .unwrap_or(4),
         output: matches.get_one::<String>("output").cloned(),
         format: matches.get_one::<String>("format").unwrap().clone(),
-        unique: matches.get_flag("unique"),
+        unique: !matches.get_flag("show-repeats"),
         sort: matches.get_one::<String>("sort").unwrap().clone(),
         info: matches.get_flag("info"),
         test: matches.get_flag("test"),
@@ -169,11 +169,35 @@ fn run_main() -> Result<(), StrangerError> {
         info_command(&options)
     } else if options.test {
         test_command(&options)
-    } else if let Some(input) = matches.get_one::<String>("input") {
-        analyze_command(input, &options)
     } else {
-        eprintln!("Error: No input file specified. Use --help for usage information.");
-        std::process::exit(1);
+        let inputs: Vec<String> = matches
+            .get_many::<String>("input")
+            .map(|vals| vals.cloned().collect())
+            .unwrap_or_default();
+
+        if inputs.is_empty() {
+            eprintln!("Error: No input file specified. Use --help for usage information.");
+            std::process::exit(1);
+        }
+
+        if options.output.is_some() && inputs.len() > 1 {
+            return Err(StrangerError::InvalidInput(
+                "--output can only be used with a single input file".to_string(),
+            ));
+        }
+
+        let stdin_count = inputs.iter().filter(|input| input.as_str() == "-").count();
+        if stdin_count > 1 {
+            return Err(StrangerError::InvalidInput(
+                "stdin input ('-') can only be specified once".to_string(),
+            ));
+        }
+
+        for input in &inputs {
+            analyze_command(input, &options)?;
+        }
+
+        Ok(())
     };
 
     result
