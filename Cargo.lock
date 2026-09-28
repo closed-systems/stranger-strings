@@ -372,7 +372,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "stranger-strings-rs"
+name = "stranger-strings"
 version = "0.2.0"
 dependencies = [
  "clap",

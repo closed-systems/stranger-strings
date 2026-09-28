@@ -4,7 +4,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use stranger_strings_rs::{
+use stranger_strings::{
     get_threshold_for_length, AnalysisOptions, BinaryAnalysisOptions, StrangerError,
     StrangerStrings, StringAnalysisResult, SupportedEncoding, ScriptType, MAX_NG_THRESHOLD, NG_THRESHOLDS,
 };

@@ -1,6 +1,6 @@
-use stranger_strings_rs::language::chinese::ChineseAnalyzer;
-use stranger_strings_rs::language::cyrillic::CyrillicAnalyzer;
-use stranger_strings_rs::language::arabic::ArabicAnalyzer;
+use stranger_strings::language::chinese::ChineseAnalyzer;
+use stranger_strings::language::cyrillic::CyrillicAnalyzer;
+use stranger_strings::language::arabic::ArabicAnalyzer;
 
 #[test]
 fn test_debug_chinese_scoring() {

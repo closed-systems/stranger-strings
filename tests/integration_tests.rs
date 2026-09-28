@@ -1,4 +1,4 @@
-use stranger_strings_rs::{AnalysisOptions, StrangerStrings};
+use stranger_strings::{AnalysisOptions, StrangerStrings};
 
 #[test]
 fn test_real_model_loading() {

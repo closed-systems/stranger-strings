@@ -1,4 +1,4 @@
-use stranger_strings_rs::{StrangerStrings, AnalysisOptions};
+use stranger_strings::{StrangerStrings, AnalysisOptions};
 
 #[test]
 fn test_score_compatibility_with_typescript() {

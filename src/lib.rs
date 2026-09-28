@@ -7,7 +7,7 @@
 //! # Examples
 //!
 //! ```
-//! use stranger_strings_rs::{StrangerStrings, AnalysisOptions};
+//! use stranger_strings::{StrangerStrings, AnalysisOptions};
 //!
 //! let mut analyzer = StrangerStrings::new();
 //! // Note: This example won't run as-is because it requires a model file

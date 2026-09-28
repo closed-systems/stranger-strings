@@ -1,11 +1,11 @@
 [package]
-name = "stranger-strings-rs"
+name = "stranger-strings"
 version = "0.2.0"
 edition = "2021"
 description = "Extract human-readable strings from binary files using trigram-based scoring"
 license = "Apache-2.0"
 authors = ["Kayne Naughton <kayne@closed.systems>"]
-repository = "https://github.com/closed-systems/stranger-strings-rs"
+repository = "https://github.com/closed-systems/stranger-strings"
 
 [[bin]]
 name = "stranger-strings"

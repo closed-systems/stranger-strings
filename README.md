@@ -1,4 +1,4 @@
-# stranger-strings-rs
+# stranger-strings
 
 Rust implementation of Stranger Strings: extract candidate strings from binaries and score them using a Ghidra-compatible trigram model.
 
@@ -21,8 +21,8 @@ Builds for Linux, macOS (x86_64 + aarch64), and Windows are published from Git t
 ### From source
 
 ```bash
-git clone https://github.com/closed-systems/stranger-strings-rs
-cd stranger-strings-rs
+git clone https://github.com/closed-systems/stranger-strings
+cd stranger-strings
 cargo build --release
 ```
 
@@ -108,7 +108,7 @@ stranger-strings --test
 ### Basic trigram scoring
 
 ```rust
-use stranger_strings_rs::{AnalysisOptions, StrangerStrings};
+use stranger_strings::{AnalysisOptions, StrangerStrings};
 
 let mut analyzer = StrangerStrings::new();
 analyzer.load_model(&AnalysisOptions {
@@ -123,10 +123,10 @@ println!("valid={} score={:.3}", result.is_valid, result.score);
 ### Binary analysis with multiple encodings
 
 ```rust
-use stranger_strings_rs::{BinaryAnalysisOptions, StrangerStrings, SupportedEncoding};
+use stranger_strings::{BinaryAnalysisOptions, StrangerStrings, SupportedEncoding};
 
 let mut analyzer = StrangerStrings::new();
-analyzer.load_model(&stranger_strings_rs::AnalysisOptions {
+analyzer.load_model(&stranger_strings::AnalysisOptions {
     model_path: Some("./StringModel.sng".to_string()),
     ..Default::default()
 })?;
@@ -148,7 +148,7 @@ println!("{} strings analyzed", results.len());
 ### Script detection only
 
 ```rust
-use stranger_strings_rs::StrangerStrings;
+use stranger_strings::StrangerStrings;
 
 let mut analyzer = StrangerStrings::new();
 analyzer.enable_language_detection()?;
