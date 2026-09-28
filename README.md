@@ -4,13 +4,22 @@ Rust implementation of Stranger Strings: extract candidate strings from binaries
 
 ![Stranger Strings](./strangerstrings.png)
 
+Stranger Strings helps analysts work through the noise produced by conventional `strings` extraction. It ranks candidate text using character patterns from a trained model, so common words and technical strings are more likely to survive than random printable bytes. The project began as a TypeScript implementation and is now written in Rust.
+
 ## What It Does
 
 - Extracts strings from binaries (with offset tracking)
 - Scores strings with trigram probabilities (`.sng` model format)
+- Detects Base64 blocks and scores strings extracted from their decoded bodies
 - Supports multiple extraction encodings: `ascii`, `utf8`, `utf16le`, `utf16be`, `latin1`, `latin9`
 - Can use script-aware scoring for `han`, `arabic`, and `cyrillic`
 - Outputs in `text`, `json`, or `csv`
+
+## Background and Effectiveness
+
+An example recorded for the original TypeScript implementation used `tasmota-UK.bin`: conventional `strings` returned 12,695 lines, while Stranger Strings extracted 11,011 candidates and accepted 1,375 (12.5%), rejecting 9,636. These are historical results from one firmware image, not a benchmark of the current Rust version. Different extraction rules also mean the two candidate counts are not directly comparable.
+
+The aim is to reduce manual review, not guarantee that every useful string is retained. Unusual identifiers and text poorly represented by the model can score badly. Use `-v` to inspect rejected candidates alongside their scores and thresholds; normal CLI output includes only accepted strings.
 
 ## Install
 
@@ -70,6 +79,14 @@ stranger-strings -e utf8,utf16le,latin1 ./sample.bin
 stranger-strings -e all ./sample.bin
 ```
 
+### Base64 blocks
+
+Binary-file analysis also scans for standard and URL-safe Base64, with or without padding, including common LF/CRLF line wrapping. Decoded bodies use the selected encodings and minimum string length, and their strings pass through the same scoring and validity filters as ordinary strings. Decoding is limited to one layer.
+
+JSON and CSV results include `base64_decoded_offset` for decoded strings. Their `offset` points to the encoded block in the original file; `base64_decoded_offset` points within the decoded body. Verbose text displays both offsets. Plain text includes accepted decoded strings alongside ordinary strings.
+
+Candidates must contain at least six Base64 characters and decode successfully. Wrapped lines are joined when each preceding line has at least 16 characters, a length divisible by four, and no padding. Arbitrary space-separated Base64 and UTF-16-encoded Base64 containers are not detected. As with ordinary extraction, coincidental matches in binary data can occur; scores help filter them.
+
 ### Language-aware scoring
 
 ```bash
@@ -117,6 +134,14 @@ let result = analyzer.analyze_string("hello world")?;
 println!("valid={} score={:.3}", result.is_valid, result.score);
 ```
 
+### Batch analysis and custom models
+
+`analyze_strings(&[String])` returns a result for every candidate; `extract_valid_strings(&[String])` returns only candidates that pass their thresholds. Results retain the original text alongside `normalized_string`, `score`, `threshold`, and `is_valid`.
+
+To override the embedded model, pass `AnalysisOptions` with either `model_path: Some(path)` or `model_content: Some(content)` to `load_model`. If both are set, the file path takes precedence.
+
+`extract_strings_from_binary(&bytes, min_length)` extracts raw ASCII strings with offsets without loading a model or scoring. The `analyze_binary_file` methods also extract from Base64 bodies and return both accepted and rejected results; filter on `is_valid` when using the library if you want only accepted strings.
+
 ### Binary analysis with multiple encodings
 
 ```rust
@@ -150,6 +175,45 @@ analyzer.enable_language_detection()?;
 let detection = analyzer.detect_language("Привет мир")?;
 println!("script={:?} confidence={:.2}", detection.primary_script, detection.confidence);
 ```
+
+## How Trigram Scoring Works
+
+The Latin-text scorer uses the `.sng` model's character-frequency data:
+
+1. Lowercase text when the model specifies `lowercase`, replace non-ASCII characters with spaces, trim surrounding whitespace, and collapse repeated spaces and repeated tabs.
+2. Look up character trigram probabilities, including beginning and end boundary terms. At model loading time, zero-count entries receive a count of one to avoid zero probabilities.
+3. Sum the base-10 log probabilities used by the scorer and divide by the normalized string length.
+4. Accept the string when its score is strictly greater than the threshold for that length. Higher (less negative) scores are better.
+
+Selected thresholds from `src/constants.rs`:
+
+| Normalized length | Threshold |
+| --- | --- |
+| 4 | -2.71 |
+| 5 | -3.26 |
+| 10 | -4.55 |
+| 50 | -6.08 |
+| 100 and above | -6.30 |
+
+Normalized strings shorter than four characters cannot pass the threshold of `10.0`; strings shorter than three receive the default score of `-20.0`. The extraction minimum (`-l`, default 4) is separate from this scoring rule. Script-specific scorers use their own logic when language-aware scoring is enabled.
+
+## Model Files
+
+The embedded `StringModel.sng` is a lowercase model. Its header records training sources including word lists, proper names, contractions, and extracted strings. Those training choices affect which text scores well; changing the model changes the probabilities used for scoring.
+
+Custom `.sng` files are tab-delimited text with a model-type comment and four fields per data row: three character tokens followed by a count. For example (the field separators below are literal tabs):
+
+```text
+# Model Type: lowercase
+# Example counts for hello
+[^]	h	e	1234
+h	e	l	5678
+e	l	l	4321
+l	l	o	9012
+l	o	[$]	3456
+```
+
+`[^]` marks the beginning of a string, `[$]` marks its end, `[SP]` represents a space, and `[HT]` a horizontal tab. A beginning row contains `[^]` followed by two characters; an ending row contains two characters followed by `[$]`. Do not add an uncommented column-header row.
 
 ## Compatibility
 

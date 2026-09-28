@@ -16,6 +16,7 @@
 //! println!("Valid: {}, Score: {:.3}", result.is_valid, result.score);
 //! ```
 
+mod base64;
 pub mod constants;
 pub mod encoding;
 pub mod error;
@@ -64,6 +65,10 @@ pub struct StringAnalysisResult {
     pub detected_script: Option<ScriptType>,
     /// Name of the scorer used
     pub scorer_name: Option<String>,
+    /// For Base64 results, offset is the encoded block's file offset.
+    /// This field is the string's byte offset within the decoded body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base64_decoded_offset: Option<usize>,
 }
 
 /// String extracted from binary data with its location
@@ -161,6 +166,7 @@ impl StrangerStrings {
                     offset,
                     detected_script: Some(scoring_result.script_type),
                     scorer_name: Some(scoring_result.scorer_name),
+                    base64_decoded_offset: None,
                 });
             }
         }
@@ -181,6 +187,7 @@ impl StrangerStrings {
             offset,
             detected_script: None,
             scorer_name: None,
+            base64_decoded_offset: None,
         })
     }
 
@@ -263,6 +270,8 @@ impl StrangerStrings {
             results.push(result);
         }
 
+        results.extend(self.analyze_base64_blocks(buffer, options, &extractor)?
+            .into_iter().map(|(result, _)| result));
         Ok(results)
     }
 
@@ -289,6 +298,26 @@ impl StrangerStrings {
             results.push((result, encoded_string.encoding));
         }
 
+        results.extend(self.analyze_base64_blocks(buffer, options, &extractor)?);
+        Ok(results)
+    }
+
+    fn analyze_base64_blocks(
+        &self,
+        buffer: &[u8],
+        options: &BinaryAnalysisOptions,
+        extractor: &MultiEncodingExtractor,
+    ) -> Result<Vec<(StringAnalysisResult, SupportedEncoding)>, StrangerError> {
+        let mut results = Vec::new();
+        for (block_offset, decoded) in base64::decode_blocks(buffer) {
+            for string in extractor.extract_strings(&decoded).strings {
+                let mut result = self.analyze_string_with_options(
+                    &string.string, Some(block_offset), options.use_language_scoring, None,
+                )?;
+                result.base64_decoded_offset = Some(string.offset);
+                results.push((result, string.encoding));
+            }
+        }
         Ok(results)
     }
 

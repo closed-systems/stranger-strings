@@ -241,7 +241,7 @@ impl MultiEncodingExtractor {
         text: &str,
         base_offset: usize,
         encoding: SupportedEncoding,
-        bytes_per_char: usize,
+        _bytes_per_char: usize,
     ) -> Vec<EncodedString> {
         let estimated_strings = text.len() / 20;
         let mut strings = Vec::with_capacity(estimated_strings);
@@ -252,12 +252,12 @@ impl MultiEncodingExtractor {
         for ch in text.chars() {
             if self.is_printable_char(ch) {
                 if current_string.is_empty() {
-                    string_start_offset = base_offset + (char_offset * bytes_per_char);
+                    string_start_offset = base_offset + char_offset;
                 }
                 current_string.push(ch);
             } else {
                 if current_string.len() >= self.min_length {
-                    let byte_length = current_string.len() * bytes_per_char;
+                    let byte_length = base_offset + char_offset - string_start_offset;
                     let string_to_check = std::mem::take(&mut current_string);
                     if !self.is_garbage_string(&string_to_check) {
                         strings.push(EncodedString {
@@ -272,12 +272,16 @@ impl MultiEncodingExtractor {
                     current_string.clear();
                 }
             }
-            char_offset += 1;
+            char_offset += match encoding {
+                SupportedEncoding::Utf8 => ch.len_utf8(),
+                SupportedEncoding::Utf16Le | SupportedEncoding::Utf16Be => ch.len_utf16() * 2,
+                _ => 1,
+            };
         }
 
         // Handle the last string
         if current_string.len() >= self.min_length && !self.is_garbage_string(&current_string) {
-            let byte_len = current_string.len() * bytes_per_char;
+            let byte_len = base_offset + char_offset - string_start_offset;
             strings.push(EncodedString {
                 string: current_string,
                 offset: string_start_offset,

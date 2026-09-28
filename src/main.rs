@@ -477,6 +477,7 @@ fn format_output(
                     "valid",
                     "normalized",
                     "offset",
+                    "base64_decoded_offset",
                 ])?;
             } else {
                 wtr.write_record(&["string", "score", "threshold", "valid", "normalized"])?;
@@ -494,6 +495,7 @@ fn format_output(
 
                 if has_offsets {
                     row.push(result.offset.map_or(String::new(), |o| o.to_string()));
+                    row.push(result.base64_decoded_offset.map_or(String::new(), |o| o.to_string()));
                 }
 
                 wtr.write_record(&row)?;
@@ -527,9 +529,12 @@ fn format_output(
                     let string_display = format!("\"{}\"", result.original_string);
 
                     if has_offsets {
-                        let offset_display = result
+                        let mut offset_display = result
                             .offset
                             .map_or(String::new(), |o| format!("0x{:X}", o));
+                        if let Some(decoded_offset) = result.base64_decoded_offset {
+                            offset_display.push_str(&format!(" (base64+0x{:X})", decoded_offset));
+                        }
                         output.push_str(&format!(
                             "{:<20} {:<12.3} {:<12.3} {:<10} {}\n",
                             string_display, result.score, result.threshold, offset_display, status
