@@ -10,14 +10,10 @@
 //! use stranger_strings::{StrangerStrings, AnalysisOptions};
 //!
 //! let mut analyzer = StrangerStrings::new();
-//! // Note: This example won't run as-is because it requires a model file
-//! // analyzer.load_model(&AnalysisOptions {
-//! //     model_path: Some("./StringModel.sng".to_string()),
-//! //     ..Default::default()
-//! // }).unwrap();
-//! //
-//! // let result = analyzer.analyze_string("hello world").unwrap();
-//! // println!("Valid: {}, Score: {:.3}", result.is_valid, result.score);
+//! analyzer.load_model(&AnalysisOptions::default()).unwrap();
+//!
+//! let result = analyzer.analyze_string("hello world").unwrap();
+//! println!("Valid: {}, Score: {:.3}", result.is_valid, result.score);
 //! ```
 
 pub mod constants;
@@ -41,9 +37,9 @@ pub use scoring::{StringScorer as NewStringScorer, ScoringResult, ScoringFactory
 /// Options for string analysis
 #[derive(Debug, Clone, Default)]
 pub struct AnalysisOptions {
-    /// Path to the .sng model file
+    /// Path to a custom .sng model file (takes precedence over model_content)
     pub model_path: Option<String>,
-    /// Raw model content as a string
+    /// Custom model content; uses embedded StringModel.sng when neither source is set
     pub model_content: Option<String>,
     /// Minimum string length for binary extraction
     pub minimum_length: Option<usize>,
@@ -109,16 +105,14 @@ impl StrangerStrings {
         }
     }
 
-    /// Load a trigram model from file or string content
+    /// Load a custom model from file or string content, or the embedded model by default
     pub fn load_model(&mut self, options: &AnalysisOptions) -> Result<(), StrangerError> {
         let model = if let Some(path) = &options.model_path {
             ModelParser::parse_model_file(Path::new(path))?
         } else if let Some(content) = &options.model_content {
             ModelParser::parse_model_string(content)?
         } else {
-            return Err(StrangerError::InvalidInput(
-                "Either model_path or model_content must be provided".to_string(),
-            ));
+            ModelParser::parse_model_string(include_str!("../StringModel.sng"))?
         };
 
         self.scorer = Some(StringScorer::new(&model));

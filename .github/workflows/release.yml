@@ -20,22 +20,18 @@ jobs:
           - runner: ubuntu-latest
             os_name: linux-x86_64
             target: x86_64-unknown-linux-gnu
-            archive_ext: tar.gz
             binary_name: stranger-strings
           - runner: macos-latest
             os_name: macos-x86_64
             target: x86_64-apple-darwin
-            archive_ext: tar.gz
             binary_name: stranger-strings
           - runner: macos-latest
             os_name: macos-aarch64
             target: aarch64-apple-darwin
-            archive_ext: tar.gz
             binary_name: stranger-strings
           - runner: windows-latest
             os_name: windows-x86_64
             target: x86_64-pc-windows-msvc
-            archive_ext: zip
             binary_name: stranger-strings.exe
 
     steps:
@@ -55,21 +51,15 @@ jobs:
         shell: bash
         run: |
           PKG_NAME="stranger-strings-${{ github.ref_name }}-${{ matrix.os_name }}"
-          mkdir -p "$PKG_NAME"
-          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "$PKG_NAME/"
-          cp "StringModel.sng" "$PKG_NAME/"
-          tar -czf "$PKG_NAME.tar.gz" "$PKG_NAME"
-          echo "ASSET=$PKG_NAME.tar.gz" >> "$GITHUB_ENV"
+          gzip -c "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" > "$PKG_NAME.gz"
+          echo "ASSET=$PKG_NAME.gz" >> "$GITHUB_ENV"
 
       - name: Package release artifact (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $pkgName = "stranger-strings-${{ github.ref_name }}-${{ matrix.os_name }}"
-          New-Item -ItemType Directory -Path $pkgName | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "$pkgName/"
-          Copy-Item "StringModel.sng" "$pkgName/"
-          Compress-Archive -Path "$pkgName/*" -DestinationPath "$pkgName.zip"
+          Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" -DestinationPath "$pkgName.zip"
           "ASSET=$pkgName.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload build artifact

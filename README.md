@@ -58,7 +58,7 @@ stranger-strings -m ./StringModel.sng ./sample.bin
 
 ### Model path behavior
 
-If `--model` is omitted, the CLI looks for `StringModel.sng` **next to the executable** (not in the current working directory).
+If `--model` is omitted, the CLI uses `StringModel.sng` embedded at compile time. No external model file is needed at runtime. Use `--model PATH` to load a custom model instead.
 
 ### Encodings
 
@@ -111,10 +111,7 @@ stranger-strings --test
 use stranger_strings::{AnalysisOptions, StrangerStrings};
 
 let mut analyzer = StrangerStrings::new();
-analyzer.load_model(&AnalysisOptions {
-    model_path: Some("./StringModel.sng".to_string()),
-    ..Default::default()
-})?;
+analyzer.load_model(&AnalysisOptions::default())?;
 
 let result = analyzer.analyze_string("hello world")?;
 println!("valid={} score={:.3}", result.is_valid, result.score);
@@ -126,10 +123,7 @@ println!("valid={} score={:.3}", result.is_valid, result.score);
 use stranger_strings::{BinaryAnalysisOptions, StrangerStrings, SupportedEncoding};
 
 let mut analyzer = StrangerStrings::new();
-analyzer.load_model(&stranger_strings::AnalysisOptions {
-    model_path: Some("./StringModel.sng".to_string()),
-    ..Default::default()
-})?;
+analyzer.load_model(&stranger_strings::AnalysisOptions::default())?;
 
 let bytes = std::fs::read("./sample.bin")?;
 let results = analyzer.analyze_binary_file(
@@ -197,6 +191,8 @@ cargo run -- --help
 ## Contributing
 
 PRs are welcome. Keep changes focused, add/adjust tests with behavior changes, and include CLI/library docs updates when flags or API behavior change.
+
+Please don't send AI authored PRs unless you've read and understand what it did.
 
 ## License
 

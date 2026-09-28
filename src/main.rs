@@ -2,7 +2,7 @@ use clap::{Arg, ArgAction, Command};
 use log::error;
 use std::fs;
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use stranger_strings::{
     get_threshold_for_length, AnalysisOptions, BinaryAnalysisOptions, StrangerError,
@@ -11,7 +11,7 @@ use stranger_strings::{
 
 #[derive(Debug, Clone)]
 struct CliOptions {
-    model: String,
+    model: Option<String>,
     verbose: bool,
     min_length: usize,
     output: Option<String>,
@@ -28,7 +28,7 @@ struct CliOptions {
 impl Default for CliOptions {
     fn default() -> Self {
         Self {
-            model: default_model_path(),
+            model: None,
             verbose: false,
             min_length: 4,
             output: None,
@@ -44,15 +44,6 @@ impl Default for CliOptions {
     }
 }
 
-fn default_model_path() -> String {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe_path| exe_path.parent().map(|dir| dir.join("StringModel.sng")))
-        .unwrap_or_else(|| PathBuf::from("./StringModel.sng"))
-        .to_string_lossy()
-        .into_owned()
-}
-
 fn main() {
     env_logger::init();
 
@@ -66,7 +57,7 @@ fn run_main() -> Result<(), StrangerError> {
 
     let matches = Command::new("stranger-strings")
         .about("Extract and analyze meaningful strings from binary files using trigram scoring")
-        .version("0.1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .arg(Arg::new("input")
             .help("Input file to analyze, or \"-\" to read from stdin")
             .index(1))
@@ -74,7 +65,7 @@ fn run_main() -> Result<(), StrangerError> {
             .short('m')
             .long("model")
             .value_name("PATH")
-            .help("Path to .sng model file (default: StringModel.sng next to the executable)"))
+            .help("Path to .sng model file (default: embedded StringModel.sng)"))
         .arg(Arg::new("verbose")
             .short('v')
             .long("verbose")
@@ -144,10 +135,7 @@ fn run_main() -> Result<(), StrangerError> {
     let use_language_detection = matches.get_flag("auto-detect") || languages.is_some();
     
     let options = CliOptions {
-        model: matches
-            .get_one::<String>("model")
-            .cloned()
-            .unwrap_or_else(default_model_path),
+        model: matches.get_one::<String>("model").cloned(),
         verbose: matches.get_flag("verbose"),
         min_length: matches
             .get_one::<String>("min-length")
@@ -228,26 +216,13 @@ fn parse_languages(language_str: &str) -> Result<Vec<ScriptType>, StrangerError>
 fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerError> {
     let mut analyzer = StrangerStrings::new();
 
-    // Load model or enable language detection
-    if Path::new(&options.model).exists() {
-        if options.verbose {
-            eprintln!("Loading model: {}", options.model);
-        }
-        analyzer.load_model(&AnalysisOptions {
-            model_path: Some(options.model.clone()),
-            ..Default::default()
-        })?;
-    } else if options.use_language_detection {
-        if options.verbose {
-            eprintln!("Enabling language detection (no model file found)");
-        }
-        analyzer.enable_language_detection()?;
-    } else {
-        return Err(StrangerError::InvalidInput(format!(
-            "Model file not found: {}",
-            options.model
-        )));
+    if options.verbose {
+        eprintln!("Loading model: {}", options.model.as_deref().unwrap_or("embedded StringModel.sng"));
     }
+    analyzer.load_model(&AnalysisOptions {
+        model_path: options.model.clone(),
+        ..Default::default()
+    })?;
 
     if options.verbose {
         if let Ok((model_type, is_lowercase)) = analyzer.get_model_info() {
@@ -396,7 +371,7 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
     let mut analyzer = StrangerStrings::new();
 
     analyzer.load_model(&AnalysisOptions {
-        model_path: Some(options.model.clone()),
+        model_path: options.model.clone(),
         ..Default::default()
     })?;
 
@@ -447,32 +422,23 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
 fn info_command(options: &CliOptions) -> Result<(), StrangerError> {
     let mut analyzer = StrangerStrings::new();
 
-    if !Path::new(&options.model).exists() {
-        return Err(StrangerError::InvalidInput(format!(
-            "Model file not found: {}",
-            options.model
-        )));
-    }
-
     analyzer.load_model(&AnalysisOptions {
-        model_path: Some(options.model.clone()),
+        model_path: options.model.clone(),
         ..Default::default()
     })?;
 
     let (model_type, is_lowercase) = analyzer.get_model_info()?;
-    let stats = fs::metadata(&options.model)?;
-
     println!("=== Model Information ===");
-    println!("File: {}", options.model);
-    println!("Size: {:.1} KB", stats.len() as f64 / 1024.0);
+    if let Some(path) = &options.model {
+        let stats = fs::metadata(path)?;
+        println!("File: {}", path);
+        println!("Size: {:.1} KB", stats.len() as f64 / 1024.0);
+        println!("Modified: {:?}", stats.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH));
+    } else {
+        println!("Source: embedded StringModel.sng");
+    }
     println!("Type: {}", model_type);
     println!("Lowercase: {}", is_lowercase);
-    println!(
-        "Modified: {:?}",
-        stats
-            .modified()
-            .unwrap_or_else(|_| std::time::SystemTime::UNIX_EPOCH)
-    );
 
     println!("\n=== Threshold Information ===");
     println!("Length-based thresholds:");
