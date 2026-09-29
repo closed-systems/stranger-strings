@@ -12,7 +12,7 @@ Stranger Strings helps analysts work through the noise produced by conventional 
 - Scores strings with trigram probabilities (`.sng` model format)
 - Detects Base64 blocks and scores strings extracted from their decoded bodies
 - Supports multiple extraction encodings: `ascii`, `utf8`, `utf16le`, `utf16be`, `latin1`, `latin9`
-- Can use script-aware scoring for `han`, `arabic`, and `cyrillic`
+- Can use script-aware scoring for `chinese`, `arabic`, and `cyrillic`
 - Outputs in `text`, `json`, or `csv`
 
 ## Background and Effectiveness
