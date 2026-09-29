@@ -119,20 +119,23 @@ fn run_main() -> Result<(), StrangerError> {
             .short('L')
             .long("language")
             .value_name("LANGUAGES")
-            .help("Languages/scripts to detect and score (comma-separated). Available: latin, chinese, arabic, russian, all, auto"))
+            .help("Select one scorer or detect within a comma-separated script list. Available: latin, chinese, arabic, russian, all, auto"))
         .arg(Arg::new("auto-detect")
             .long("auto-detect")
             .help("Enable automatic language detection and use language-specific scoring")
             .action(ArgAction::SetTrue))
         .get_matches();
 
-    let encodings = parse_encodings(matches.get_one::<String>("encoding").unwrap())?;
+    let mut encodings = parse_encodings(matches.get_one::<String>("encoding").unwrap())?;
     let languages = if let Some(lang_str) = matches.get_one::<String>("language") {
         Some(parse_languages(lang_str)?)
     } else {
         None
     };
     let use_language_detection = matches.get_flag("auto-detect") || languages.is_some();
+    if use_language_detection && matches.value_source("encoding") == Some(clap::parser::ValueSource::DefaultValue) {
+        encodings = vec![SupportedEncoding::Utf8];
+    }
     
     let options = CliOptions {
         model: matches.get_one::<String>("model").cloned(),
@@ -250,7 +253,9 @@ fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerErro
             .map(|s| s.to_string())
             .collect();
 
-        results = analyzer.analyze_strings(&candidate_strings)?;
+        results = candidate_strings.iter().map(|text| analyzer.analyze_string_with_languages(
+            text, None, options.use_language_detection, options.languages.as_deref(),
+        )).collect::<Result<Vec<_>, _>>()?.into_iter().flatten().collect();
         is_binary_file = false;
     } else {
         // Analyze file
@@ -401,7 +406,9 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
         println!("{}", "-".repeat(category.len() + 1));
 
         for test_string in test_strings {
-            let result = analyzer.analyze_string(test_string)?;
+            let Some(result) = analyzer.analyze_string_with_languages(
+                test_string, None, options.use_language_detection, options.languages.as_deref(),
+            )? else { continue; };
             let status = if result.is_valid { "✓" } else { "✗" };
 
             if options.verbose {

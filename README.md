@@ -17,31 +17,73 @@ Stranger Strings helps analysts work through the noise produced by conventional 
 
 ## Background and Effectiveness
 
-The aim is to reduce manual review, not guarantee that every useful string is retained. Unusual identifiers and text poorly represented by the model can score badly. Use `-v` to inspect rejected candidates alongside their scores and thresholds; normal CLI output includes only accepted strings.
+The aim is to reduce manual review, not guarantee that every useful string is retained. Unusual identifiers and text poorly represented by the Ghidra trigram model can score badly. Use `-v` to inspect rejected candidates alongside their scores and thresholds; normal CLI output includes only accepted strings.
 
 This is a quick sniff test based on a firmware file from my Downloads directory (via https://ssz.fr/brdl/A9-wifi/rtthread.bin).
 
 Ghidra does a good job, but it misses domain specific terms from firmware like:   
+```
      0009d3a5 43 43 4d     ds       "CCMP+TKIP"
               50 2b 54 
               4b 49 50
-and 
+```
+and
+``` 
      0009d3bc 57 50 41     ds       "WPA2+WPA/IEEE 802.1X/EAP"
               32 2b 57 
               50 41 2f
-
+```
 More egregious was Ghidra's trigram model missing "HALT", "https://" and "http://". Stranger Strings misses them too so it is likely to do with the NSA's corpus rather than some specific exclusion.
 
-
 ### cctools-1030.6.3 strings (macos)
+```
 /Library/Developer/CommandLineTools/usr/bin/strings ./rtthread.bin| sort -u |wc -l
     8367
+```
 
 ### GNU strings (GNU Binutils for Ubuntu) 2.46
+```
 /usr/bin/strings /tmp/rtthread.bin|sort -u |wc -l 
     7619
+```
+### Sysinternals Strings v2.54
+```
+c:\\sysinternals\\strings.exe -nobanner -n 4 rtthread.bin | sort -u | wc -l
+    8172
+```
+## ELF test case (ubuntu coreutils ls)
 
+-rwxr-xr-x 115 root root 11352352 Apr 16 22:41 /lib/cargo/bin/coreutils/ls
+2d313ecc9fc058f6e0758abe00c0f6e8
 
+String extractor | Unique strings
+--- | ---
+MacOS strings | 23026
+Ubuntu strings | 22957
+FLOSS | did not complete within 20 minutes 🤷‍♂️
+Ghidra 12.04 (after a few rounds of auto-analysis) | 5030
+stranger-strings | 7505
+
+Stranger Strings is naive about the string extraction so Rust binaries are always going to be a bit less precise than a semantically aware parser (like Ghidra, or FLOSS... if it could finish).
+
+My spot checks with very rudimentary MSA and Russian indicate those language models work better than I expected on the ubuntu ls binary. I used /usr/share/locale/zh_CN/LC_MESSAGES/apt.mo (the Chinese translation file for Ubuntu apt) to spot check that model and it seems sensible:
+
+```
+String               Adjusted Score Score        Threshold    Offset     Valid
+-------------------------------------------------------------------------------------
+"或者只能在其他发布源中找到"      3.141          6.423        -3.000       0x8607     ✓
+"列出所有手动安装的软件包"       3.111          6.333        -3.000       0x897E     ✓
+"列出所有手动安装的软件包"       3.111          6.333        -3.000       0x8980     ✓
+"不是一个实包(虚包)"         3.083          6.250        -3.000       0xACBD     ✓
+"不是一个实包(虚包)"         3.083          6.250        -3.000       0xACBF     ✓
+"有些软件包不能通过验证"        3.076          6.227        -3.000       0x90A8     ✓
+"有些软件包不能通过验证"        3.076          6.227        -3.000       0x90AC     ✓
+"自动卸载所有不再使用的软件包"     3.071          6.214        -3.000       0xAA63     ✓
+"参数不成对"              3.067          6.200        -3.000       0x6E56     ✓
+"参数不成对"              3.067          6.200        -3.000       0x6E58     ✓
+"列出所有自动安装的软件包"       3.056          6.167        -3.000       0x8959     ✓
+...
+```
 ## Install
 
 ### Prebuilt binaries
@@ -86,9 +128,9 @@ stranger-strings -f json -o result.json ./sample.bin
 stranger-strings -m ./StringModel.sng ./sample.bin
 ```
 
-Scored output includes the adjusted score (`(threshold - score) / threshold`), shown immediately after the string in text and CSV output and named `adjusted_score` in JSON/CSV. For negative thresholds, positive adjusted scores pass the threshold and higher values indicate stronger results. The default `--sort score` orders by adjusted score, largest first. Validity still uses `score > threshold`. Trigram candidates shorter than four normalized characters remain invalid and have no adjusted score: text shows `N/A`, JSON uses `null`, and CSV leaves the cell empty. These candidates sort after all scored results.
+Scored output includes the adjusted score (`(threshold - score) / threshold`), shown immediately after the string in text and CSV output and named `adjusted_score` in JSON/CSV. For negative thresholds, positive adjusted scores pass the threshold and higher values indicate stronger results. The default `--sort score` orders by adjusted score, largest first. Validity still uses `score > threshold`. Trigram candidates shorter than four normalised characters remain invalid and have no adjusted score: text shows `N/A`, JSON uses `null`, and CSV leaves the cell empty. These candidates sort after all scored results.
 
-### Model path behavior
+### Model path behaviour
 
 If `--model` is omitted, the CLI uses `StringModel.sng` embedded at compile time. No external model file is needed at runtime. Use `--model PATH` to load a custom model instead.
 
@@ -111,6 +153,10 @@ JSON and CSV results include `base64_decoded_offset` for decoded strings. Their 
 Candidates must contain at least six Base64 characters and decode successfully. Wrapped lines are joined when each preceding line has at least 16 characters, a length divisible by four, and no padding. Arbitrary space-separated Base64 and UTF-16-encoded Base64 containers are not detected. As with ordinary extraction, coincidental matches in binary data can occur; scores help filter them.
 
 ### Language-aware scoring
+
+`-L arabic` explicitly selects the Arabic scorer (likewise `chinese` and `russian`). A comma-separated list detects the script and scores candidates whose detected script is in that list. `-L auto`, `-L all`, and `--auto-detect` enable detection across supported scripts.
+
+Language-aware mode defaults to UTF-8 extraction and preserves printable Unicode candidates for scoring. An explicit `-e` overrides that default; use `-e utf16le` or `-e all` for other encodings. Language selection applies to file contents, decoded Base64 bodies, and stdin candidates. Without language-aware mode, extraction still defaults to ASCII.
 
 ```bash
 # Auto-detect script and score with script-specific scorer

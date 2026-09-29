@@ -273,19 +273,20 @@ impl StrangerStrings {
         options: &BinaryAnalysisOptions,
     ) -> Result<Vec<StringAnalysisResult>, StrangerError> {
         let min_length = options.min_length.unwrap_or(4);
-        let encodings = options.encodings.clone().unwrap_or_else(|| vec![SupportedEncoding::Ascii]);
+        let encodings = options.encodings.clone().unwrap_or_else(|| if options.use_language_scoring {
+            vec![SupportedEncoding::Utf8]
+        } else { vec![SupportedEncoding::Ascii] });
         
-        let extractor = MultiEncodingExtractor::new(encodings, min_length);
+        let extractor = MultiEncodingExtractor::new(encodings, min_length)
+            .with_language_scoring(options.use_language_scoring);
         let multi_result = extractor.extract_strings(buffer);
 
         let mut results = Vec::new();
         for encoded_string in multi_result.strings {
-            let result = self.analyze_string_with_options(
-                &encoded_string.string, 
-                Some(encoded_string.offset),
-                options.use_language_scoring,
-                None // Auto-detect language
-            )?;
+            let Some(result) = self.analyze_string_with_languages(
+                &encoded_string.string, Some(encoded_string.offset),
+                options.use_language_scoring, options.target_languages.as_deref(),
+            )? else { continue; };
             results.push(result);
         }
 
@@ -303,22 +304,41 @@ impl StrangerStrings {
         let min_length = options.min_length.unwrap_or(4);
         let encodings = options.encodings.clone().unwrap_or_else(SupportedEncoding::all);
         
-        let extractor = MultiEncodingExtractor::new(encodings, min_length);
+        let extractor = MultiEncodingExtractor::new(encodings, min_length)
+            .with_language_scoring(options.use_language_scoring);
         let multi_result = extractor.extract_strings(buffer);
 
         let mut results = Vec::new();
         for encoded_string in multi_result.strings {
-            let result = self.analyze_string_with_options(
-                &encoded_string.string, 
-                Some(encoded_string.offset),
-                options.use_language_scoring,
-                None // Auto-detect language
-            )?;
+            let Some(result) = self.analyze_string_with_languages(
+                &encoded_string.string, Some(encoded_string.offset),
+                options.use_language_scoring, options.target_languages.as_deref(),
+            )? else { continue; };
             results.push((result, encoded_string.encoding));
         }
 
         results.extend(self.analyze_base64_blocks(buffer, options, &extractor)?);
         Ok(results)
+    }
+
+    /// Score using a selected language, or detect within a selected set.
+    /// An empty selection enables unrestricted detection.
+    pub fn analyze_string_with_languages(
+        &self, text: &str, offset: Option<usize>, enabled: bool,
+        languages: Option<&[ScriptType]>,
+    ) -> Result<Option<StringAnalysisResult>, StrangerError> {
+        let target = if enabled {
+            match languages {
+                Some([script]) => Some(*script),
+                Some(scripts) if !scripts.is_empty() => {
+                    let detected = self.detect_language(text)?.primary_script;
+                    if !scripts.contains(&detected) { return Ok(None); }
+                    Some(detected)
+                }
+                _ => None,
+            }
+        } else { None };
+        self.analyze_string_with_options(text, offset, enabled, target).map(Some)
     }
 
     fn analyze_base64_blocks(
@@ -330,9 +350,10 @@ impl StrangerStrings {
         let mut results = Vec::new();
         for (block_offset, decoded) in base64::decode_blocks(buffer) {
             for string in extractor.extract_strings(&decoded).strings {
-                let mut result = self.analyze_string_with_options(
-                    &string.string, Some(block_offset), options.use_language_scoring, None,
-                )?;
+                let Some(mut result) = self.analyze_string_with_languages(
+                    &string.string, Some(block_offset), options.use_language_scoring,
+                    options.target_languages.as_deref(),
+                )? else { continue; };
                 result.base64_decoded_offset = Some(string.offset);
                 results.push((result, string.encoding));
             }

@@ -113,6 +113,7 @@ impl From<EncodedString> for BinaryString {
 pub struct MultiEncodingExtractor {
     encodings: Vec<SupportedEncoding>,
     min_length: usize,
+    allow_unicode: bool,
 }
 
 impl MultiEncodingExtractor {
@@ -121,7 +122,14 @@ impl MultiEncodingExtractor {
         Self {
             encodings,
             min_length,
+            allow_unicode: false,
         }
+    }
+
+    /// Preserve printable Unicode candidates for language-aware scoring.
+    pub fn with_language_scoring(mut self, enabled: bool) -> Self {
+        self.allow_unicode = enabled;
+        self
     }
 
     /// Create an extractor that tries all supported encodings
@@ -386,9 +394,9 @@ impl MultiEncodingExtractor {
         // 5. More than 20% suspicious extended ASCII characters
         replacement_ratio > 0.05 ||
         control_ratio > 0.15 ||
-        ascii_ratio < 0.6 ||
+        (!self.allow_unicode && (ascii_ratio < 0.6 ||
         non_ascii_ratio > 0.4 ||
-        suspicious_ratio > 0.2
+        suspicious_ratio > 0.2))
     }
 }
 
