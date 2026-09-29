@@ -71,6 +71,19 @@ pub struct StringAnalysisResult {
     pub base64_decoded_offset: Option<usize>,
 }
 
+impl StringAnalysisResult {
+    /// Adjusted score: (threshold - score) / threshold.
+    /// Unavailable for trigram candidates shorter than four normalized characters.
+    pub fn adjusted_score(&self) -> Option<f64> {
+        let uses_trigrams = self.scorer_name.as_deref().is_none_or(|name| name == "Trigram");
+        if uses_trigrams && self.normalized_string.chars().count() < 4 {
+            return None;
+        }
+        let adjusted = (self.threshold - self.score) / self.threshold;
+        adjusted.is_finite().then_some(adjusted)
+    }
+}
+
 /// String extracted from binary data with its location
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BinaryString {
@@ -157,12 +170,18 @@ impl StrangerStrings {
                     factory.score_string(candidate_string)?
                 };
 
+                let normalized_string = if scoring_result.scorer_name == "Trigram" {
+                    let model = self.model.as_ref().ok_or(StrangerError::ModelNotLoaded)?;
+                    StringProcessor::process_string(candidate_string, model.is_lowercase_model()).scored_string
+                } else {
+                    candidate_string.to_string()
+                };
                 return Ok(StringAnalysisResult {
                     original_string: candidate_string.to_string(),
                     score: scoring_result.score,
                     threshold: scoring_result.threshold,
                     is_valid: scoring_result.is_valid,
-                    normalized_string: candidate_string.to_string(),
+                    normalized_string,
                     offset,
                     detected_script: Some(scoring_result.script_type),
                     scorer_name: Some(scoring_result.scorer_name),

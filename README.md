@@ -17,9 +17,30 @@ Stranger Strings helps analysts work through the noise produced by conventional 
 
 ## Background and Effectiveness
 
-An example recorded for the original TypeScript implementation used `tasmota-UK.bin`: conventional `strings` returned 12,695 lines, while Stranger Strings extracted 11,011 candidates and accepted 1,375 (12.5%), rejecting 9,636. These are historical results from one firmware image, not a benchmark of the current Rust version. Different extraction rules also mean the two candidate counts are not directly comparable.
-
 The aim is to reduce manual review, not guarantee that every useful string is retained. Unusual identifiers and text poorly represented by the model can score badly. Use `-v` to inspect rejected candidates alongside their scores and thresholds; normal CLI output includes only accepted strings.
+
+This is a quick sniff test based on a firmware file from my Downloads directory (via https://ssz.fr/brdl/A9-wifi/rtthread.bin).
+
+Ghidra does a good job, but it misses domain specific terms from firmware like:   
+     0009d3a5 43 43 4d     ds       "CCMP+TKIP"
+              50 2b 54 
+              4b 49 50
+and 
+     0009d3bc 57 50 41     ds       "WPA2+WPA/IEEE 802.1X/EAP"
+              32 2b 57 
+              50 41 2f
+
+More egregious was Ghidra's trigram model missing "HALT", "https://" and "http://". Stranger Strings misses them too so it is likely to do with the NSA's corpus rather than some specific exclusion.
+
+
+### cctools-1030.6.3 strings (macos)
+/Library/Developer/CommandLineTools/usr/bin/strings ./rtthread.bin| sort -u |wc -l
+    8367
+
+### GNU strings (GNU Binutils for Ubuntu) 2.46
+/usr/bin/strings /tmp/rtthread.bin|sort -u |wc -l 
+    7619
+
 
 ## Install
 
@@ -64,6 +85,8 @@ stranger-strings -f json -o result.json ./sample.bin
 # Use explicit model path
 stranger-strings -m ./StringModel.sng ./sample.bin
 ```
+
+Scored output includes the adjusted score (`(threshold - score) / threshold`), shown immediately after the string in text and CSV output and named `adjusted_score` in JSON/CSV. For negative thresholds, positive adjusted scores pass the threshold and higher values indicate stronger results. The default `--sort score` orders by adjusted score, largest first. Validity still uses `score > threshold`. Trigram candidates shorter than four normalized characters remain invalid and have no adjusted score: text shows `N/A`, JSON uses `null`, and CSV leaves the cell empty. These candidates sort after all scored results.
 
 ### Model path behavior
 
@@ -110,7 +133,7 @@ stranger-strings -l 6 ./sample.bin
 # Keep only unique strings
 stranger-strings -u ./sample.bin
 
-# Sort: score | alpha | offset
+# Sort: score (adjusted score) | alpha | offset
 stranger-strings -s offset ./sample.bin
 
 # Show model metadata and exit

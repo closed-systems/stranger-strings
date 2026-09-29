@@ -86,7 +86,7 @@ fn run_main() -> Result<(), StrangerError> {
             .short('s')
             .long("sort")
             .value_name("METHOD")
-            .help("Sort results by: score (default), alpha (alphabetical), offset (file position)")
+            .help("Sort results by: score (adjusted score, default), alpha (alphabetical), offset (file position)")
             .default_value("score")
             .value_parser(["score", "alpha", "offset"]))
         .arg(Arg::new("output")
@@ -319,17 +319,17 @@ fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerErro
 
     // Sort results
     match options.sort.as_str() {
-        "score" => output_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap()),
+        "score" => output_results.sort_by(compare_adjusted_scores),
         "alpha" => output_results.sort_by(|a, b| a.original_string.cmp(&b.original_string)),
         "offset" => {
             if is_binary_file {
                 output_results.sort_by(|a, b| a.offset.unwrap_or(0).cmp(&b.offset.unwrap_or(0)));
             } else {
                 eprintln!("Warning: Offset sorting only available for binary files, sorting by score instead");
-                output_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+                output_results.sort_by(compare_adjusted_scores);
             }
         }
-        _ => output_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap()),
+        _ => output_results.sort_by(compare_adjusted_scores),
     }
 
     // Output results
@@ -406,8 +406,8 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
 
             if options.verbose {
                 println!(
-                    "  {} \"{}\" → score: {:.3}, threshold: {:.3}",
-                    status, test_string, result.score, result.threshold
+                    "  {} \"{}\" → adjusted score: {}, score: {:.3}, threshold: {:.3}",
+                    status, test_string, display_adjusted_score(&result), result.score, result.threshold
                 );
             } else {
                 println!("  {} \"{}\"", status, test_string);
@@ -455,13 +455,36 @@ fn info_command(options: &CliOptions) -> Result<(), StrangerError> {
     Ok(())
 }
 
+fn compare_adjusted_scores(a: &StringAnalysisResult, b: &StringAnalysisResult) -> std::cmp::Ordering {
+    match (a.adjusted_score(), b.adjusted_score()) {
+        (Some(a), Some(b)) => b.total_cmp(&a),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+fn display_adjusted_score(result: &StringAnalysisResult) -> String {
+    result.adjusted_score().map_or_else(|| "N/A".to_string(), |score| format!("{:.3}", score))
+}
+
 fn format_output(
     results: &[StringAnalysisResult],
     options: &CliOptions,
 ) -> Result<String, StrangerError> {
     match options.format.as_str() {
         "json" => {
-            let json = serde_json::to_string_pretty(results)?;
+            #[derive(serde::Serialize)]
+            struct OutputResult<'a> {
+                #[serde(flatten)]
+                result: &'a StringAnalysisResult,
+                adjusted_score: Option<f64>,
+            }
+            let rows: Vec<_> = results.iter().map(|result| OutputResult {
+                result,
+                adjusted_score: result.adjusted_score(),
+            }).collect();
+            let json = serde_json::to_string_pretty(&rows)?;
             Ok(json)
         }
         "csv" => {
@@ -472,6 +495,7 @@ fn format_output(
             if has_offsets {
                 wtr.write_record(&[
                     "string",
+                    "adjusted_score",
                     "score",
                     "threshold",
                     "valid",
@@ -480,13 +504,14 @@ fn format_output(
                     "base64_decoded_offset",
                 ])?;
             } else {
-                wtr.write_record(&["string", "score", "threshold", "valid", "normalized"])?;
+                wtr.write_record(&["string", "adjusted_score", "score", "threshold", "valid", "normalized"])?;
             }
 
             // Write data rows
             for result in results {
                 let mut row = vec![
                     result.original_string.clone(),
+                    result.adjusted_score().map_or(String::new(), |score| score.to_string()),
                     result.score.to_string(),
                     result.threshold.to_string(),
                     result.is_valid.to_string(),
@@ -511,16 +536,16 @@ fn format_output(
 
                 if has_offsets {
                     output.push_str(&format!(
-                        "{:<20} {:<12} {:<12} {:<10} {}\n",
-                        "String", "Score", "Threshold", "Offset", "Valid"
+                        "{:<20} {:<14} {:<12} {:<12} {:<10} {}\n",
+                        "String", "Adjusted Score", "Score", "Threshold", "Offset", "Valid"
                     ));
-                    output.push_str(&"-".repeat(70));
+                    output.push_str(&"-".repeat(85));
                 } else {
                     output.push_str(&format!(
-                        "{:<20} {:<12} {:<12} {}\n",
-                        "String", "Score", "Threshold", "Valid"
+                        "{:<20} {:<14} {:<12} {:<12} {}\n",
+                        "String", "Adjusted Score", "Score", "Threshold", "Valid"
                     ));
-                    output.push_str(&"-".repeat(60));
+                    output.push_str(&"-".repeat(75));
                 }
                 output.push('\n');
 
@@ -536,13 +561,13 @@ fn format_output(
                             offset_display.push_str(&format!(" (base64+0x{:X})", decoded_offset));
                         }
                         output.push_str(&format!(
-                            "{:<20} {:<12.3} {:<12.3} {:<10} {}\n",
-                            string_display, result.score, result.threshold, offset_display, status
+                            "{:<20} {:<14} {:<12.3} {:<12.3} {:<10} {}\n",
+                            string_display, display_adjusted_score(result), result.score, result.threshold, offset_display, status
                         ));
                     } else {
                         output.push_str(&format!(
-                            "{:<20} {:<12.3} {:<12.3} {}\n",
-                            string_display, result.score, result.threshold, status
+                            "{:<20} {:<14} {:<12.3} {:<12.3} {}\n",
+                            string_display, display_adjusted_score(result), result.score, result.threshold, status
                         ));
                     }
                 }
