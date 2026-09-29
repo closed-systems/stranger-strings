@@ -15,7 +15,7 @@ Stranger Strings helps analysts work through the noise produced by conventional 
 - Can use script-aware scoring for `chinese`, `arabic`, and `cyrillic`
 - Outputs in `text`, `json`, or `csv`
 
-## Background and Effectiveness
+## Background and Effectiveness Testing
 
 The aim is to reduce manual review, not guarantee that every useful string is retained. Unusual identifiers and text poorly represented by the Ghidra trigram model can score badly. Use `-v` to inspect rejected candidates alongside their scores and thresholds; normal CLI output includes only accepted strings.
 
