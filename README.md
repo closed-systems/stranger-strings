@@ -262,7 +262,7 @@ String               Adjusted Score Score        Threshold    Offset     Valid
 
 Let's compare this to the tools you might regularly use:
 
-### cctools-1030.6.3 strings (macos)
+### cctools-1030.6.3 strings (macOS)
 ```
 /Library/Developer/CommandLineTools/usr/bin/strings ./rtthread.bin| sort -u |wc -l
     8367
@@ -301,7 +301,7 @@ c:\\sysinternals\\strings.exe -nobanner -n 4 rtthread.bin | sort -u | wc -l
 
 String extractor | Unique strings
 --- | ---
-MacOS strings | 23026
+macOS strings | 23026
 Ubuntu strings | 22957
 FLOSS | did not complete within 20 minutes 🤷‍♂️
 Ghidra 12.04 (after a few rounds of auto-analysis) | 5030
@@ -309,7 +309,7 @@ stranger-strings | 7505
 
 Stranger Strings is naive about the string extraction so Rust binaries are always going to be a bit less precise than a structurally aware parser (like Ghidra, or FLOSS... if it could finish).
 
-My spot checks with very rudimentary MSA and Russian indicate those language models work better than I expected on the Ubuntu ls binary. I used /usr/share/locale/zh_CN/LC_MESSAGES/apt.mo (the Chinese translation file for Ubuntu APT) to spot check that model - it seems sensible:
+My spot checks with very rudimentary MSA and Russian indicate those language models work better than I expected on the Ubuntu ls binary. I used `/usr/share/locale/zh_CN/LC_MESSAGES/apt.mo` (the Chinese translation file for Ubuntu APT) to spot check that model - it seems sensible:
 
 ```
 String               Adjusted Score Score        Threshold    Offset     Valid
@@ -431,12 +431,12 @@ The Latin-text scorer uses the `.sng` model's character-frequency data:
 
 1. Lowercase text when the model specifies `lowercase`, replace non-ASCII characters with spaces, trim surrounding whitespace, and collapse repeated spaces and repeated tabs.
 2. Look up character trigram probabilities, including beginning and end boundary terms. At model loading time, zero-count entries receive a count of one to avoid zero probabilities.
-3. Sum the base-10 log probabilities used by the scorer and divide by the normalized string length.
+3. Sum the base-10 log probabilities used by the scorer and divide by the normalised string length.
 4. Accept the string when its score is strictly greater than the threshold for that length. Higher (less negative) scores are better.
 
 Selected thresholds from `src/constants.rs`:
 
-| Normalized length | Threshold |
+| Normalised length | Threshold |
 | --- | --- |
 | 4 | -2.71 |
 | 5 | -3.26 |
@@ -444,7 +444,7 @@ Selected thresholds from `src/constants.rs`:
 | 50 | -6.08 |
 | 100 and above | -6.30 |
 
-Normalized strings shorter than four characters cannot pass the threshold of `10.0`; strings shorter than three receive the default score of `-20.0`. The extraction minimum (`-l`, default 4) is separate from this scoring rule. Script-specific scorers use their own logic when language-aware scoring is enabled.
+Normalised strings shorter than four characters cannot pass the threshold of `10.0`; strings shorter than three receive the default score of `-20.0`. The extraction minimum (`-l`, default 4) is separate from this scoring rule. Script-specific scorers use their own logic when language-aware scoring is enabled.
 
 ## Model Files
 
@@ -466,7 +466,7 @@ l	o	[$]	3456
 
 ## Compatibility
 
-For Latin text with a loaded model, scoring is intended to match the original TypeScript implementation and `.sng` model behavior.
+For Latin text with a loaded model, scoring is intended to match the original TypeScript implementation and `.sng` model behaviour.
 
 Current tests include compatibility checks and language-scoring checks:
 
@@ -503,10 +503,14 @@ cargo run -- --help
 
 ## Contributing
 
-PRs are welcome. Keep changes focused, add/adjust tests with behavior changes, and include CLI/library docs updates when flags or API behavior change.
+PRs are welcome. Keep changes focused, add/adjust tests with behaviour changes, and include CLI/library docs updates when flags or API behaviour change.
+
+Suggested further enhancements include looking at the radare2 string finder/scorers and stress testing unicode matching methods against binaries from weird and wonderful compilers.
 
 Please don't send AI authored PRs unless you've read and understand what it did.
 
 ## License
 
 Apache-2.0
+
+StringModel.sng and original approach via NSA's [Ghidra](https://github.com/NationalSecurityAgency/ghidra/).
