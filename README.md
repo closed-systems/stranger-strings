@@ -21,6 +21,7 @@ The aim is to reduce manual review, not guarantee that every useful string is re
 
 This is a quick sniff test based on a firmware file from my Downloads directory (via https://ssz.fr/brdl/A9-wifi/rtthread.bin).
 
+
 Ghidra does a good job, but it misses domain specific terms from firmware like:   
 ```
      0009d3a5 43 43 4d     ds       "CCMP+TKIP"
@@ -34,6 +35,38 @@ and
               50 41 2f
 ```
 More egregious was Ghidra's trigram model missing "HALT", "https://" and "http://". Stranger Strings misses them too so it is likely to do with the NSA's corpus rather than some specific exclusion.
+
+### Stranger Strings
+1281 unique strings identified.
+
+The scoring cut-off is a little too aggressive on this binary, I need to add a more relaxed threshold option.
+```
+❯ ../target/release/stranger-strings -v ./rtthread.bin|grep -v ✓ |head -n 20 
+Loading model: embedded StringModel.sng
+Model type: lowercase, Lowercase: true
+Analyzing file: ./rtthread.bin
+Extracted 9231 candidate strings (min length: 4)
+String               Adjusted Score Score        Threshold    Offset     Valid
+-------------------------------------------------------------------------------------
+"cuer"               -0.000         -2.710       -2.710       0x403B4    ✗
+" %d 0x%x"           -0.000         -3.841       -3.840       0x95A3F    ✗
+"http://183.193.243.90:9151/mp3/209713.mp3" -0.004         -6.026       -6.000       0xA085F    ✗
+"%02d:%02d:%02d.%03d " -0.005         -5.445       -5.420       0xB0C23    ✗
+"txu_cntrl_cfm"      -0.005         -5.054       -5.030       0xAC042    ✗
+" LINK_UP"           -0.006         -3.865       -3.840       0xA805F    ✗
+"[EVM]tx_exit"       -0.007         -4.912       -4.880       0xAB52F    ✗
+"bick"               -0.007         -2.730       -2.710       0x4FF26    ✗
+"stop"               -0.008         -2.731       -2.710       0x97EB6    ✗
+"reg_isr_o1"         -0.008         -4.587       -4.550       0x947E2    ✗
+"######input:%s"     -0.008         -5.101       -5.060       0x976F5    ✗
+"--help"             -0.010         -3.555       -3.520       0xA5BA1    ✗
+"SPK OFF!!"          -0.011         -4.541       -4.490       0x9FE5F    ✗
+"http://183.193.243.90:9151/mp3/73865964.mp3" -0.012         -6.073       -6.000       0xA03BC    ✗
+"=====TF OK!!===="   -0.014         -5.313       -5.240       0x977E9    ✗
+"NO-EAP"             -0.014         -3.569       -3.520       0x9EF79    ✗
+" ps :%d s"          -0.014         -4.291       -4.230       0x95A96    ✗
+"rt_mq_recv"         -0.015         -4.617       -4.550       0xA39A9    ✗
+```
 
 ### cctools-1030.6.3 strings (macos)
 ```
