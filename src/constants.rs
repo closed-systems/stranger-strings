@@ -28,6 +28,12 @@ pub const NG_THRESHOLDS: [f64; 101] = [
 /// Maximum threshold for strings longer than the threshold array
 pub const MAX_NG_THRESHOLD: f64 = -6.3;
 
+/// Lower eligible scoring thresholds by the given adjustment.
+/// Positive thresholds are eligibility sentinels and must remain unchanged.
+pub fn scoring_threshold(threshold: f64, adjustment: f64) -> f64 {
+    if threshold < 0.0 { threshold - adjustment } else { threshold }
+}
+
 /// Special character markers used in model files
 pub const BEGIN_MARKER: &str = "[^]";
 pub const END_MARKER: &str = "[$]";

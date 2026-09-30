@@ -111,6 +111,7 @@ pub struct StrangerStrings {
     model: Option<TrigramModel>,
     scorer: Option<StringScorer>,
     scoring_factory: Option<ScoringFactory>,
+    threshold_adjustment: f64,
 }
 
 impl StrangerStrings {
@@ -120,7 +121,24 @@ impl StrangerStrings {
             model: None,
             scorer: None,
             scoring_factory: None,
+            threshold_adjustment: 0.0,
         }
+    }
+
+    /// Lower scoring thresholds by 1.0 while preserving eligibility checks.
+    /// Disabled by default; applies to all analysis methods.
+    pub fn set_relaxed(&mut self, relaxed: bool) {
+        self.threshold_adjustment = if relaxed { 1.0 } else { 0.0 };
+    }
+
+    /// Adjust scoring thresholds: positive values accept more strings; negative
+    /// values are stricter. Eligibility sentinels remain unchanged.
+    pub fn set_threshold_adjustment(&mut self, adjustment: f64) -> Result<(), StrangerError> {
+        if !adjustment.is_finite() {
+            return Err(StrangerError::InvalidInput("Threshold adjustment must be finite".to_string()));
+        }
+        self.threshold_adjustment = adjustment;
+        Ok(())
     }
 
     /// Load a custom model from file or string content, or the embedded model by default
@@ -176,11 +194,12 @@ impl StrangerStrings {
                 } else {
                     candidate_string.to_string()
                 };
+                let threshold = scoring_threshold(scoring_result.threshold, self.threshold_adjustment);
                 return Ok(StringAnalysisResult {
                     original_string: candidate_string.to_string(),
                     score: scoring_result.score,
-                    threshold: scoring_result.threshold,
-                    is_valid: scoring_result.is_valid,
+                    threshold,
+                    is_valid: scoring_result.score > threshold,
                     normalized_string,
                     offset,
                     detected_script: Some(scoring_result.script_type),
@@ -196,6 +215,7 @@ impl StrangerStrings {
 
         let processed = StringProcessor::process_string(candidate_string, model.is_lowercase_model());
         let (score, threshold) = scorer.score_string_with_model(&processed, model);
+        let threshold = scoring_threshold(threshold, self.threshold_adjustment);
 
         Ok(StringAnalysisResult {
             original_string: processed.original_string,

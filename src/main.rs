@@ -1,11 +1,11 @@
 use clap::{Arg, ArgAction, Command};
 use log::error;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 use stranger_strings::{
-    get_threshold_for_length, AnalysisOptions, BinaryAnalysisOptions, StrangerError,
+    get_threshold_for_length, scoring_threshold, AnalysisOptions, BinaryAnalysisOptions, StrangerError,
     StrangerStrings, StringAnalysisResult, SupportedEncoding, ScriptType, MAX_NG_THRESHOLD, NG_THRESHOLDS,
 };
 
@@ -13,6 +13,7 @@ use stranger_strings::{
 struct CliOptions {
     model: Option<String>,
     verbose: bool,
+    threshold_adjustment: f64,
     min_length: usize,
     output: Option<String>,
     format: String,
@@ -30,6 +31,7 @@ impl Default for CliOptions {
         Self {
             model: None,
             verbose: false,
+            threshold_adjustment: 0.0,
             min_length: 4,
             output: None,
             format: "text".to_string(),
@@ -48,6 +50,9 @@ fn main() {
     env_logger::init();
 
     if let Err(e) = run_main() {
+        if matches!(&e, StrangerError::Io(error) if error.kind() == io::ErrorKind::BrokenPipe) {
+            return;
+        }
         error!("Error: {}", e);
         std::process::exit(1);
     }
@@ -71,6 +76,17 @@ fn run_main() -> Result<(), StrangerError> {
             .long("verbose")
             .help("Show detailed scoring information")
             .action(ArgAction::SetTrue))
+        .arg(Arg::new("relaxed")
+            .long("relaxed")
+            .help("Lower scoring thresholds by 1.0 (same as --threshold 1)")
+            .conflicts_with("threshold")
+            .action(ArgAction::SetTrue))
+        .arg(Arg::new("threshold")
+            .long("threshold")
+            .value_name("NUMBER")
+            .allow_hyphen_values(true)
+            .value_parser(parse_threshold_adjustment)
+            .help("Adjust scoring thresholds: positive values accept more strings, negative values are stricter"))
         .arg(Arg::new("min-length")
             .short('l')
             .long("min-length")
@@ -140,6 +156,8 @@ fn run_main() -> Result<(), StrangerError> {
     let options = CliOptions {
         model: matches.get_one::<String>("model").cloned(),
         verbose: matches.get_flag("verbose"),
+        threshold_adjustment: matches.get_one::<f64>("threshold").copied()
+            .unwrap_or(if matches.get_flag("relaxed") { 1.0 } else { 0.0 }),
         min_length: matches
             .get_one::<String>("min-length")
             .unwrap()
@@ -168,6 +186,14 @@ fn run_main() -> Result<(), StrangerError> {
     };
 
     result
+}
+
+fn parse_threshold_adjustment(value: &str) -> Result<f64, String> {
+    let adjustment: f64 = value.parse().map_err(|_| "Expected a finite number".to_string())?;
+    if !adjustment.is_finite() {
+        return Err("Threshold adjustment must be finite".to_string());
+    }
+    Ok(adjustment)
 }
 
 fn parse_encodings(encoding_str: &str) -> Result<Vec<SupportedEncoding>, StrangerError> {
@@ -218,6 +244,7 @@ fn parse_languages(language_str: &str) -> Result<Vec<ScriptType>, StrangerError>
 
 fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerError> {
     let mut analyzer = StrangerStrings::new();
+    analyzer.set_threshold_adjustment(options.threshold_adjustment)?;
 
     if options.verbose {
         eprintln!("Loading model: {}", options.model.as_deref().unwrap_or("embedded StringModel.sng"));
@@ -346,7 +373,9 @@ fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerErro
             eprintln!("Results written to: {}", output_path);
         }
     } else {
-        print!("{}", output_content);
+        let mut stdout = io::stdout().lock();
+        stdout.write_all(output_content.as_bytes())?;
+        stdout.flush()?;
     }
 
     if options.verbose {
@@ -373,7 +402,9 @@ fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerErro
 }
 
 fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
+    let mut stdout = io::stdout().lock();
     let mut analyzer = StrangerStrings::new();
+    analyzer.set_threshold_adjustment(options.threshold_adjustment)?;
 
     analyzer.load_model(&AnalysisOptions {
         model_path: options.model.clone(),
@@ -396,14 +427,14 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
         ("Edge Cases", vec!["ab", "a", "", "123", "XML"]),
     ];
 
-    println!("=== StrangerStrings Test Results ===\n");
+    writeln!(stdout, "=== StrangerStrings Test Results ===\n")?;
 
     let (model_type, is_lowercase) = analyzer.get_model_info()?;
-    println!("Model: {} (lowercase: {})\n", model_type, is_lowercase);
+    writeln!(stdout, "Model: {} (lowercase: {})\n", model_type, is_lowercase)?;
 
     for (category, test_strings) in test_cases {
-        println!("{}:", category);
-        println!("{}", "-".repeat(category.len() + 1));
+        writeln!(stdout, "{}:", category)?;
+        writeln!(stdout, "{}", "-".repeat(category.len() + 1))?;
 
         for test_string in test_strings {
             let Some(result) = analyzer.analyze_string_with_languages(
@@ -412,22 +443,25 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
             let status = if result.is_valid { "✓" } else { "✗" };
 
             if options.verbose {
-                println!(
+                writeln!(stdout,
                     "  {} \"{}\" → adjusted score: {}, score: {:.3}, threshold: {:.3}",
                     status, test_string, display_adjusted_score(&result), result.score, result.threshold
-                );
+                )?;
             } else {
-                println!("  {} \"{}\"", status, test_string);
+                writeln!(stdout, "  {} \"{}\"", status, test_string)?;
             }
         }
-        println!();
+        writeln!(stdout)?;
     }
 
+    stdout.flush()?;
     Ok(())
 }
 
 fn info_command(options: &CliOptions) -> Result<(), StrangerError> {
+    let mut stdout = io::stdout().lock();
     let mut analyzer = StrangerStrings::new();
+    analyzer.set_threshold_adjustment(options.threshold_adjustment)?;
 
     analyzer.load_model(&AnalysisOptions {
         model_path: options.model.clone(),
@@ -435,30 +469,31 @@ fn info_command(options: &CliOptions) -> Result<(), StrangerError> {
     })?;
 
     let (model_type, is_lowercase) = analyzer.get_model_info()?;
-    println!("=== Model Information ===");
+    writeln!(stdout, "=== Model Information ===")?;
     if let Some(path) = &options.model {
         let stats = fs::metadata(path)?;
-        println!("File: {}", path);
-        println!("Size: {:.1} KB", stats.len() as f64 / 1024.0);
-        println!("Modified: {:?}", stats.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH));
+        writeln!(stdout, "File: {}", path)?;
+        writeln!(stdout, "Size: {:.1} KB", stats.len() as f64 / 1024.0)?;
+        writeln!(stdout, "Modified: {:?}", stats.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH))?;
     } else {
-        println!("Source: embedded StringModel.sng");
+        writeln!(stdout, "Source: embedded StringModel.sng")?;
     }
-    println!("Type: {}", model_type);
-    println!("Lowercase: {}", is_lowercase);
+    writeln!(stdout, "Type: {}", model_type)?;
+    writeln!(stdout, "Lowercase: {}", is_lowercase)?;
 
-    println!("\n=== Threshold Information ===");
-    println!("Length-based thresholds:");
+    writeln!(stdout, "\n=== Threshold Information ===")?;
+    writeln!(stdout, "Length-based thresholds:")?;
     for i in 4..=20 {
-        let threshold = get_threshold_for_length(i);
-        println!("  Length {:2}: {:.3}", i, threshold);
+        let threshold = scoring_threshold(get_threshold_for_length(i), options.threshold_adjustment);
+        writeln!(stdout, "  Length {:2}: {:.3}", i, threshold)?;
     }
-    println!(
+    writeln!(stdout,
         "  Length 50+: {:.3}",
-        NG_THRESHOLDS.get(50).unwrap_or(&MAX_NG_THRESHOLD)
-    );
-    println!("  Length 100+: {:.3}", MAX_NG_THRESHOLD);
+        scoring_threshold(*NG_THRESHOLDS.get(50).unwrap_or(&MAX_NG_THRESHOLD), options.threshold_adjustment)
+    )?;
+    writeln!(stdout, "  Length 100+: {:.3}", scoring_threshold(MAX_NG_THRESHOLD, options.threshold_adjustment))?;
 
+    stdout.flush()?;
     Ok(())
 }
 

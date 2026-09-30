@@ -161,6 +161,8 @@ stranger-strings -f json -o result.json ./sample.bin
 stranger-strings -m ./StringModel.sng ./sample.bin
 ```
 
+Use `--relaxed` to retain more borderline candidates, for example `stranger-strings binary.exe --relaxed`. This lowers all eligible scoring thresholds by 1.0 (length 4: -2.71 → -3.71; length 100+: -6.30 → -7.30), including language-specific thresholds. Raw scores, extraction limits, short-string eligibility, and script checks are unchanged. This accepts more noise as well as potentially useful strings. Verbose, JSON, CSV, and `--info` output report the active thresholds. Library callers can enable it with `analyzer.set_relaxed(true)`. Use `--threshold <number>` for a custom adjustment: `--threshold 1` is equivalent to `--relaxed`, `--threshold 2` lowers thresholds by 2.0, and negative values make scoring stricter. The value must be finite; `--threshold` and `--relaxed` cannot be combined. Library callers can use `analyzer.set_threshold_adjustment(2.0)?`.
+
 Scored output includes the adjusted score (`(threshold - score) / threshold`), shown immediately after the string in text and CSV output and named `adjusted_score` in JSON/CSV. For negative thresholds, positive adjusted scores pass the threshold and higher values indicate stronger results. The default `--sort score` orders by adjusted score, largest first. Validity still uses `score > threshold`. Trigram candidates shorter than four normalised characters remain invalid and have no adjusted score: text shows `N/A`, JSON uses `null`, and CSV leaves the cell empty. These candidates sort after all scored results.
 
 ### Model path behaviour
