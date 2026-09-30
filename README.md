@@ -13,7 +13,7 @@ Stranger Strings helps analysts work through the noise produced by conventional 
 - Detects Base64 blocks and scores strings extracted from their decoded bodies
 - Supports multiple extraction encodings: `ascii`, `utf8`, `utf16le`, `utf16be`, `latin1`, `latin9`
 - Can use script-aware scoring for `chinese`, `arabic`, and `cyrillic`
-- Outputs in `text`, `json`, or `csv`
+- Outputs in `text`, `json`, `jsonl`, or `csv`
 
 ## Install
 
@@ -104,6 +104,9 @@ Summary:
   Total: 9256 strings
   Acceptance rate: 41.2%
 
+# JSON Lines output (one JSON object per line)
+$ stranger-strings -f jsonl -o result.jsonl ./sample.bin
+
 # JSON output
 $ stranger-strings -f json -o result.json ./sample.bin
 
@@ -136,10 +139,13 @@ $ stranger-strings ./rtthread.bin -f json |jq '.[] | select(.offset < 100000)'
 ```
 
 Use `--relaxed` to retain more borderline candidates, for example `stranger-strings binary.exe --relaxed`. This lowers all eligible scoring thresholds by 1.0 (length 4: -2.71 to -3.71; length 100+: -6.30 to -7.30), including language-specific thresholds.
-This accepts more noise as well as potentially useful strings. Verbose, JSON, CSV, and `--info` output report the active thresholds. 
+This accepts more noise as well as potentially useful strings. Verbose, JSON, JSONL, CSV, and `--info` output report the active thresholds.
 Use `--threshold <number>` for a custom adjustment: `--threshold 1` is equivalent to `--relaxed`, `--threshold 2` lowers thresholds by 2.0, and negative values make scoring stricter. `--threshold` and `--relaxed` cannot be combined. Library callers can use `analyzer.set_threshold_adjustment(2.0)?`.
 
-Scored output includes the adjusted score (`score - threshold`), shown immediately after the string in text and CSV output and named `adjusted_score` in JSON/CSV. Positive adjusted scores pass the threshold and higher values indicate stronger results. The default `--sort score` orders by adjusted score, largest first. Trigram candidates shorter than four normalised characters are invalid and have no adjusted score: verbose text shows `N/A`, JSON uses `null`, and CSV leaves the cell empty. These candidates sort after all scored results.
+Scored output includes the adjusted score (`score - threshold`), shown immediately after the string in text and CSV output and named `adjusted_score` in JSON/JSONL/CSV. Positive adjusted scores pass the threshold and higher values indicate stronger results. The default `--sort score` orders by adjusted score, largest first. Trigram candidates shorter than four normalised characters are invalid and have no adjusted score: verbose text shows `N/A`, JSON and JSONL use `null`, and CSV leaves the cell empty. These candidates sort after all scored results.
+
+JSONL (`--format jsonl`) emits one compact JSON object per line with the same fields as JSON output, including `adjusted_score`. Each record ends with a newline; no results produce empty output. Filtering, sorting, and `--unique` work the same as for other formats.
+
 
 
 ## Background and Effectiveness Testing

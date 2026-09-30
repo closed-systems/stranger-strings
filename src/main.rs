@@ -114,9 +114,9 @@ fn run_main() -> Result<(), StrangerError> {
             .short('f')
             .long("format")
             .value_name("FORMAT")
-            .help("Output format: text, json, csv")
+            .help("Output format: text, json, jsonl, csv")
             .default_value("text")
-            .value_parser(["text", "json", "csv"]))
+            .value_parser(["text", "json", "jsonl", "csv"]))
         .arg(Arg::new("info")
             .long("info")
             .help("Show model information and exit")
@@ -521,7 +521,7 @@ fn format_output(
     options: &CliOptions,
 ) -> Result<String, StrangerError> {
     match options.format.as_str() {
-        "json" => {
+        "json" | "jsonl" => {
             #[derive(serde::Serialize)]
             struct OutputResult<'a> {
                 #[serde(flatten)]
@@ -532,8 +532,16 @@ fn format_output(
                 result,
                 adjusted_score: result.adjusted_score(),
             }).collect();
-            let json = serde_json::to_string_pretty(&rows)?;
-            Ok(json)
+            if options.format == "jsonl" {
+                let mut output = String::new();
+                for row in &rows {
+                    output.push_str(&serde_json::to_string(row)?);
+                    output.push('\n');
+                }
+                Ok(output)
+            } else {
+                Ok(serde_json::to_string_pretty(&rows)?)
+            }
         }
         "csv" => {
             let mut wtr = csv::Writer::from_writer(vec![]);
