@@ -25,7 +25,7 @@ fn run(format: &str, sort: &str) -> String {
 }
 
 #[test]
-fn score_sort_uses_ratio_and_reports_it() {
+fn score_sort_uses_difference_and_reports_it() {
     for sort in ["score", "offset"] {
         let rows: Vec<serde_json::Value> = serde_json::from_str(&run("json", sort)).unwrap();
         assert_eq!(rows.last().unwrap()["original_string"], "a");
@@ -33,14 +33,14 @@ fn score_sort_uses_ratio_and_reports_it() {
         assert_eq!(rows.last().unwrap()["is_valid"], false);
         let rows = &rows[..rows.len() - 1];
         for row in rows {
-            let expected = (row["threshold"].as_f64().unwrap() - row["score"].as_f64().unwrap()) / row["threshold"].as_f64().unwrap();
+            let expected = row["score"].as_f64().unwrap() - row["threshold"].as_f64().unwrap();
             assert!((row["adjusted_score"].as_f64().unwrap() - expected).abs() < 1e-12);
         }
         assert!(rows
             .windows(2)
             .all(|pair| pair[0]["adjusted_score"].as_f64().unwrap()
                 >= pair[1]["adjusted_score"].as_f64().unwrap()));
-        // Ensure this fixture distinguishes ratio sorting from raw score sorting.
+        // Ensure this fixture distinguishes difference sorting from raw score sorting.
         assert!(rows
             .windows(2)
             .any(|pair| pair[0]["score"].as_f64().unwrap() < pair[1]["score"].as_f64().unwrap()));
@@ -64,7 +64,7 @@ fn text_and_csv_include_adjusted_score() {
             assert!(row[1].is_empty());
             continue;
         }
-        let expected = (row[3].parse::<f64>().unwrap() - row[2].parse::<f64>().unwrap()) / row[3].parse::<f64>().unwrap();
+        let expected = row[2].parse::<f64>().unwrap() - row[3].parse::<f64>().unwrap();
         assert!((row[1].parse::<f64>().unwrap() - expected).abs() < 1e-12);
     }
 }
@@ -82,5 +82,18 @@ fn eligibility_uses_normalized_length_in_both_scoring_paths() {
         }
         let result = analyzer.analyze_string_with_options("hello", None, language_scoring, None).unwrap();
         assert!(result.adjusted_score().is_some());
+    }
+}
+
+#[test]
+fn adjusted_difference_handles_zero_and_positive_thresholds() {
+    use stranger_strings::{AnalysisOptions, StrangerStrings};
+    let mut analyzer = StrangerStrings::new();
+    analyzer.load_model(&AnalysisOptions::default()).unwrap();
+    let mut result = analyzer.analyze_string("hello").unwrap();
+    for (score, threshold, expected) in [(2.0, 0.0, 2.0), (2.0, 3.0, -1.0), (3.0, 3.0, 0.0)] {
+        result.score = score;
+        result.threshold = threshold;
+        assert_eq!(result.adjusted_score(), Some(expected));
     }
 }

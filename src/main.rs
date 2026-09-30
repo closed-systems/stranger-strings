@@ -374,8 +374,14 @@ fn analyze_command(input: &str, options: &CliOptions) -> Result<(), StrangerErro
         }
     } else {
         let mut stdout = io::stdout().lock();
-        stdout.write_all(output_content.as_bytes())?;
-        stdout.flush()?;
+        let output_result = stdout.write_all(output_content.as_bytes())
+            .and_then(|()| stdout.flush());
+        if let Err(error) = output_result {
+            // A pager may close stdout early; still emit the analysis summary.
+            if error.kind() != io::ErrorKind::BrokenPipe {
+                return Err(error.into());
+            }
+        }
     }
 
     if options.verbose {
@@ -440,7 +446,7 @@ fn test_command(options: &CliOptions) -> Result<(), StrangerError> {
             let Some(result) = analyzer.analyze_string_with_languages(
                 test_string, None, options.use_language_detection, options.languages.as_deref(),
             )? else { continue; };
-            let status = if result.is_valid { "✓" } else { "✗" };
+            let status = if result.is_valid { "Y" } else { "N" };
 
             if options.verbose {
                 writeln!(stdout,
@@ -592,7 +598,7 @@ fn format_output(
                 output.push('\n');
 
                 for result in results {
-                    let status = if result.is_valid { "✓" } else { "✗" };
+                    let status = if result.is_valid { "Y" } else { "N" };
                     let string_display = format!("\"{}\"", result.original_string);
 
                     if has_offsets {

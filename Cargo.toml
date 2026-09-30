@@ -2,10 +2,15 @@
 name = "stranger-strings"
 version = "0.3.0"
 edition = "2021"
+rust-version = "1.90"
 description = "Extract human-readable strings from binary files using trigram-based scoring"
 license = "Apache-2.0"
 authors = ["Kayne Naughton <kayne@closed.systems>"]
 repository = "https://github.com/closed-systems/stranger-strings"
+readme = "README.md"
+keywords = ["strings", "binary", "reverse-engineering", "forensics", "trigram"]
+categories = ["command-line-utilities", "text-processing"]
+exclude = ["/.github/**"]
 
 [[bin]]
 name = "stranger-strings"

@@ -72,14 +72,14 @@ pub struct StringAnalysisResult {
 }
 
 impl StringAnalysisResult {
-    /// Adjusted score: (threshold - score) / threshold.
+    /// Adjusted score: score - threshold.
     /// Unavailable for trigram candidates shorter than four normalized characters.
     pub fn adjusted_score(&self) -> Option<f64> {
         let uses_trigrams = self.scorer_name.as_deref().is_none_or(|name| name == "Trigram");
         if uses_trigrams && self.normalized_string.chars().count() < 4 {
             return None;
         }
-        let adjusted = (self.threshold - self.score) / self.threshold;
+        let adjusted = self.score - self.threshold;
         adjusted.is_finite().then_some(adjusted)
     }
 }
